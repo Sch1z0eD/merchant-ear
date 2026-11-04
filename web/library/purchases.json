@@ -1,4 +1,175 @@
 {
- "updated": null,
- "purchases": []
+ "updated": "2026-11-04T12:12:56.120Z",
+ "purchases": [
+  {
+   "t": 1793053488470,
+   "soundId": "lib:electronicdevice",
+   "size": "1x2",
+   "label": "Uncommon Mystery Cargo",
+   "price": 200000,
+   "itemId": 408120017,
+   "item": "Leveler",
+   "q": "gold"
+  },
+  {
+   "t": 1793386046839,
+   "soundId": "lib:med_statue",
+   "size": "1x2",
+   "label": "Mystery Cargo",
+   "price": 250000,
+   "itemId": 408080030,
+   "item": "Gold Cup",
+   "q": "gold"
+  },
+  {
+   "t": 1793391944244,
+   "soundId": "lib:electronicdevice",
+   "size": "2x3",
+   "label": "Uncommon Mystery Cargo",
+   "price": 270000,
+   "itemId": 408030028,
+   "item": "Vector Processor",
+   "q": "gold"
+  },
+  {
+   "t": 1793563526000,
+   "soundId": null,
+   "size": "2x2",
+   "label": "Rare Mystery Cargo",
+   "price": 376000,
+   "itemId": 498080019,
+   "item": "Star of Kamona Pendant",
+   "q": "red"
+  },
+  {
+   "t": 1793575719819,
+   "soundId": "lib:small_metal_crisp",
+   "size": "2x3",
+   "label": "Energy Items",
+   "price": 376000,
+   "itemId": 498060001,
+   "item": "Space Lab Toybox",
+   "q": "gold"
+  },
+  {
+   "t": 1793576854185,
+   "soundId": "lib:electronicdevice",
+   "size": "2x2",
+   "label": "Flammables",
+   "price": 56000,
+   "itemId": 408140024,
+   "item": "Laptop Computer",
+   "q": "gold"
+  },
+  {
+   "t": 1793649783411,
+   "soundId": "lib:small_metal_crisp",
+   "size": "2x3",
+   "label": "Mystery Cargo",
+   "price": 70000,
+   "itemId": 498060001,
+   "item": "Space Lab Toybox",
+   "q": "gold"
+  },
+  {
+   "t": 1793657495127,
+   "soundId": "lib:big_wood",
+   "size": "2x3",
+   "label": "Mystery Cargo",
+   "price": 216000,
+   "itemId": 498080025,
+   "item": "Double-Neck Lute",
+   "q": "red"
+  },
+  {
+   "t": 1793660215728,
+   "soundId": "lib:small_metal_blunt",
+   "size": "2x2",
+   "label": "Uncommon Mystery Cargo",
+   "price": 280000,
+   "itemId": 498070009,
+   "item": "Infrared Therapy Lamp",
+   "q": "gold"
+  },
+  {
+   "t": 1793726683114,
+   "soundId": "lib:electronicdevice",
+   "size": "2x3",
+   "label": "Energy Items",
+   "price": 70000,
+   "itemId": 408030028,
+   "item": "Vector Processor",
+   "q": "gold"
+  },
+  {
+   "t": 1793736875652,
+   "soundId": "lib:small_metal_blunt",
+   "size": "2x2",
+   "label": "Rare Mystery Cargo",
+   "price": 550000,
+   "itemId": 498070009,
+   "item": "Infrared Therapy Lamp",
+   "q": "gold"
+  },
+  {
+   "t": 1793739978618,
+   "soundId": "lib:med_comp",
+   "size": "2x2",
+   "label": "Household Items",
+   "price": 80000,
+   "itemId": 408060043,
+   "item": "Film Stock",
+   "q": "gold"
+  },
+  {
+   "t": 1793739978629,
+   "soundId": "lib:med_statue",
+   "size": "2x2",
+   "label": "Rare Mystery Cargo",
+   "price": 376000,
+   "itemId": 498100002,
+   "item": "K7-L Cipher Machine",
+   "q": "gold"
+  },
+  {
+   "t": 1793740080607,
+   "soundId": "lib:small_metal_crisp",
+   "size": "2x3",
+   "label": "Uncommon Mystery Cargo",
+   "price": 216000,
+   "itemId": 498060001,
+   "item": "Space Lab Toybox",
+   "q": "gold"
+  },
+  {
+   "t": 1793742186517,
+   "soundId": "lib:med_statue",
+   "size": "2x2",
+   "label": "Uncommon Mystery Cargo",
+   "price": 200000,
+   "itemId": 498100002,
+   "item": "K7-L Cipher Machine",
+   "q": "gold"
+  },
+  {
+   "t": 1793747030926,
+   "soundId": "lib:electronicdevice",
+   "size": "2x2",
+   "label": "Uncommon Mystery Cargo",
+   "price": 200000,
+   "itemId": 408100011,
+   "item": "Antenna",
+   "q": "gold"
+  },
+  {
+   "t": 1793747198743,
+   "soundId": "lib:small_metal_blunt",
+   "size": "2x3",
+   "label": "Rare Mystery Cargo",
+   "price": 440000,
+   "itemId": 498100003,
+   "item": "Three-Axis Gyro Controller Prototype",
+   "q": "red"
+  }
+ ]
 }

@@ -57,6 +57,12 @@
   .brand img { width: 30px; height: 30px; display: block; }
   header h1 { margin: 0; font: 700 19px/1 var(--font-display); letter-spacing: .01em; }
   header .status { color: var(--text-2); font-size: 13px; padding: 4px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line); }
+  header .ver { color: var(--muted); font: 600 12px var(--font-display); }
+  header .update { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent);
+    background: rgba(239, 138, 58, .12); font: 600 13px var(--font-body); text-decoration: none; }
+  header .update:hover { background: rgba(239, 138, 58, .22); }
+  .session { margin-top: 12px; font-size: 14px; }
+  .session .head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; color: var(--text-2); font: 600 14px var(--font-display); }
 
   /* Cards */
   section { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow);
@@ -190,10 +196,11 @@
 </head>
 <body>
 <header>
-  <div class="brand"><img src="icon.svg" alt=""><h1 data-i18n="app">Merchant Ear</h1></div>
+  <div class="brand"><img src="icon.svg" alt=""><h1 data-i18n="app">Merchant Ear</h1><span id="ver" class="ver"></span></div>
   <button id="btnStart" class="primary" data-i18n="btn.start">Start catching</button>
   <button id="btnStop" disabled data-i18n="btn.stop">Stop</button>
   <span class="status" id="status" data-i18n="status.idle">Not running</span>
+  <a id="update" class="update" target="_blank" rel="noopener" hidden></a>
   <select id="mode" class="mode" data-i18n-title="mode.title">
     <option value="second" data-i18n="mode.second">Second screen</option><option value="overlay" data-i18n="mode.overlay">Overlay (one monitor)</option>
   </select>
@@ -219,6 +226,7 @@
     </div>
     <div class="map-wrap" id="mapWrap"><canvas id="map" width="360" height="200"></canvas></div>
     <div id="rank" class="rank" hidden></div>
+    <div id="session" class="session"></div>
     <p class="muted" style="margin:8px 0 0" data-i18n="map.hint"></p>
   </section>
 </div>
@@ -262,6 +270,12 @@
           <option value="3" data-i18n="opt.buys3">3 buys per raid</option>
           <option value="4" data-i18n="opt.buys4">4 buys per raid</option>
         </select>
+        <select id="gameLang" data-i18n-title="tip.gameLang">
+          <option value="auto" data-i18n="opt.gameAuto">Game: auto</option>
+          <option value="eng" data-i18n="opt.gameEng">Game: English</option>
+          <option value="rus" data-i18n="opt.gameRus">Game: Russian</option>
+        </select>
+        <label data-i18n-title="tip.alert"><input type="checkbox" id="alertOn"> <span data-i18n="lbl.alert">Alert</span></label>
         <input type="file" id="libDir" webkitdirectory hidden>
       </div>
       <div class="row">
@@ -314,6 +328,7 @@
 const TRACK_SX = 4, TRACK_SY = 2;  // frame downscale for scroll tracking
 const RING_MS = 3000;        // how much frame history to keep
 const OCC_GREY = 0.3;        // share of "grey" in a cell to count it as cargo (empty slots are black)
+const ONE_LABEL_MIN = 0.02;  // share of label text (Vision detail) a 1×1 needs to count as cargo: empty slots have none
 const PICK_MIN_DIFF = 4;     // minimal cargo change (0–255) to count it as dragged
 const RED_MIN = 3;           // minimal "redness" of the trace where a cargo was dragged
 const MAP_R = 6;             // corner radius of a cargo on the map
@@ -373,6 +388,12 @@ const STALE_SHARE = 0.4;     // this share of the visible cargo clashing with a 
 const STALE_PARSES = 4;      // for this many parses in a row
 const MISS_PARSES = 6;       // a confirmed cargo missing from its place this many parses in a row (scan phase) is dropped
 const VALUE_KEY = 'merchant-ear-value-v1'; // value basis for payback (VALUE_BASES)
+const ALERT_KEY = 'merchant-ear-alert-v1'; // whether a hovered good cargo plays a chime
+const ALERT_RED = 0.25;      // a cargo with this red chance is worth an alert even if it does not pay off
+const SESSION_KEY = 'merchant-ear-session-v1'; // start of the session summary (sessionStorage: survives a reload of the tab)
+const GAME_LANG_KEY = 'merchant-ear-gamelang-v1'; // { choice: 'auto'|'eng'|'rus', found: language detected last time }
+const LANG_PROBE = 8;        // label reads in one language without a single known label before auto mode tries the other
+const REPO = 'Sch1z0eD/merchant-ear'; // releases are checked here for a newer version
 const VALUE_BASES = ['contact', 'merchant', 'market']; // see itemValue
 const PRICE_MARKUP = 1.1;    // the merchant adds ~10% to the pool price (100,000 in the table — 110,000 in the game)
 const PRICE_MATCH_LOG = 0.25; // the tooltip price must be close to the pool price (in log scale, ≈ ±28%)
@@ -400,12 +421,16 @@ const PURCHASES_KEY = 'merchant-ear-purchases-v2'; // v1 had records from the ni
 const OLD_PURCHASE_KEYS = ['merchant-ear-purchases-v1', 'merchant-ear-nick-v1'];
 const PRIOR_N = 20;          // the merchant data weighs as much as this many own purchases (more: learns slower)
 const FEED_MS = 1000;        // how often to look at the "… obtained [item]" line above the grid
-const FEED_TOP = 1.15, FEED_BOTTOM = 0.6; // where it is: a band above the top of the list, in cells
+// Where it is, in cells above the top of the list: one header row ("Mysterious Supplies …") above the list, or
+// right above it when that header is part of the scrolled list. Both bands are read, one line each.
+const FEED_BANDS = [[1.15, 0.6], [0.6, 0]];
+const FEED_RIGHT_CUT = 0.5;  // the button at the right end of the purchase line, in cells: read as stray letters
 const BUY_MATCH = 0.01;      // the line amount and the tooltip price match with this precision
 const BALANCE_LEFT = 0.4;    // the "Owned" balance is right of this share of the list width
 const BALANCE_BELOW = 2.6;   // and no lower than this many cells below the list
 const FEED_WAIT_MS = 30000;  // a feed line waits this long for the balance to confirm it
 const FEED_SAME_MS = 60000;  // the same line (price and similar name) within this window is the same purchase
+const FEED_BEST_MS = 4000;   // a purchase line read without a known item waits this long for a better reading
 const BASE_URL = 'library/purchases.json'; // shared base in the app folder
 const CONFIG = window.ABI_CONFIG || {};
 const BASE_REMOTE = CONFIG.baseRemote || ''; // and the freshest one on GitHub
@@ -428,6 +453,7 @@ const mapCtx = ui.map.getContext('2d');
 let stream = null, audioCtx = null, workletNode = null, srcNode = null, beepCtx = null;
 let detector = null;
 let gameWs = null, gameStatus = null; // game-only sound from the local server
+let siteVersion = '', latestRelease = null; // version.json of this site and the newest GitHub release { v, url }
 let screenWs = null;         // screen frames from the local server
 const tplCache = new Map();  // sound id → { up: [template], down: [template] }
 let captureOnset = -Infinity; // when the sound started (performance.now)
@@ -440,11 +466,17 @@ let profile = loadJson(PROFILE_KEY, '');     // selected map ('' — average ove
 let includeBlue = loadJson(BLUE_KEY, false); // whether to count blue items
 let buysPerRaid = [2, 3, 4].includes(loadJson(BUYS_KEY, 2)) ? loadJson(BUYS_KEY, 2) : 2; // see BUYS_KEY
 let valueBasis = VALUE_BASES.includes(loadJson(VALUE_KEY, 'contact')) ? loadJson(VALUE_KEY, 'contact') : 'contact';
+let alertOn = loadJson(ALERT_KEY, true);     // see ALERT_KEY
+let alerted = new Set();     // cargo already alerted about (key + price + label), cleared with a new list
+let sessionStart = (() => { try { return +sessionStorage.getItem(SESSION_KEY) || 0; } catch { return 0; } })();
+if (!sessionStart) { sessionStart = Date.now(); try { sessionStorage.setItem(SESSION_KEY, String(sessionStart)); } catch {} }
+let gameLang = loadJson(GAME_LANG_KEY, { choice: 'auto', found: 'eng' }); // see GAME_LANG_KEY
+let langStats = {};          // label reads per game language this session: { eng: { reads, hits } }
 let mode = loadJson(MODE_KEY, 'second');     // display mode, see MODE_KEY
 let overlayWin = null, overlayParts = [];    // the overlay window and the elements moved into it
 let purchases = loadJson(PURCHASES_KEY, []); // own purchases: [{ t, soundId, size, label, price, itemId, item, q }]
 let basePurchases = [];      // shared base shipped with the app (library/purchases.json) and refreshed from GitHub
-let balance = null, spent = 0;               // Koen balance below the grid and how much it dropped (not yet explained by purchases)
+let balance = null, spent = 0, spentAt = 0; // Koen balance below the grid, how much it dropped (not yet explained by purchases) and when
 let balanceSig = null, feedQueue = [], feedDone = []; // feed lines: waiting for balance confirmation / already counted
 let feedBusy = false, feedAt = 0, feedSig = null; // reading of the feed line and the balance
 let libPools = [], itemQ = {}, itemById = new Map(); // merchant pools and items from the library
@@ -476,6 +508,8 @@ let sawTop = false, sawEnd = false; // whether the top and the bottom of the lis
 let stableCount = 0;         // how many parses in a row had no new cargo
 let staleCount = 0;          // how many parses in a row a ready map clashed with the visible list
 let lastSbTop = true;        // the scrollbar thumb was at the very top on the latest frame
+let loggedBar = false;       // "scrollbar found" is logged once, not on every rescan
+let frozenP = 0;             // the cell size when the map froze: a ready map keeps to it
 let sbKnown = null;          // the scrollbar track found { x, trackTop, trackLen }
 let noBarCount = 0;          // how many parses the grid is visible but the scrollbar is not
 let thumbOddLen = 0, thumbOddCount = 0; // a thumb of a different length: which and for how many frames in a row
@@ -682,6 +716,7 @@ function closeScreen() {
 
 function showGameStatus(st) {
   gameStatus = st;
+  renderVersion();
   if (!stream || !st) return;
   if (st.state === 'game') setStatus(tr('status.game'));
   else if (st.state === 'wait') setStatus(tr('status.wait'));
@@ -975,8 +1010,8 @@ function itemTiles(list, max = 12) {
 
 // ---------- Screen: grid search, scrolling, cargo ----------
 function resetScan() {
-  P = 0; checkFrames = 0; offset = 0; viewport = null; prevSig = null; ring = []; listTopR = null;
-  cargo = new Map(); results = new Map(); lastKey = null; lastSeen = null; gridSeenAt = 0;
+  P = 0; checkFrames = 0; offset = 0; viewport = null; prevSig = null; ring = []; listTopR = null; alerted = new Set();
+  cargo = new Map(); results = new Map(); lastKey = null; lastSeen = null; gridSeenAt = 0; loggedBar = false; frozenP = 0;
   phase = 'scan'; sawTop = false; sawEnd = false; stableCount = 0;
   sbKnown = null; noBarCount = 0; frozenPlaced = null; staleCount = 0; lastView = null; viewHistory = [];
   lastScan = 0; // the next frame is parsed at once
@@ -984,13 +1019,16 @@ function resetScan() {
   drawMap();
 }
 
-// "Scan again" (after a purchase): the merchant list keeps its place, cell size and scrollbar, only the cargo
-// moved. So the grid geometry stays and only the cargo are collected anew: drawing starts on the next frame.
+// "Scan again" (after a purchase): the merchant list keeps its place and cell size, only the cargo moved.
+// So the grid geometry stays and only the cargo are collected anew: drawing starts on the next frame.
+// The scrollbar is searched anew: with fewer cargo the list is shorter and the thumb longer, or the list now fits
+// without scrolling (the thumb fills the track), and a thumb of the old length would never be found.
 // The top of the list counts as seen if the list is scrolled to the top right now.
 function rescan() {
   if (!P || !viewport) { resetScan(); return; }
   cargo = new Map(); results = new Map(); lastKey = null; frozenPlaced = null; hover = null; hoverSig = '';
   phase = 'scan'; sawTop = !sbKnown || lastSbTop; sawEnd = false; stableCount = 0; checkFrames = 0; staleCount = 0;
+  sbKnown = null; noBarCount = 0; thumbOddCount = 0; frozenP = 0;
   lastScan = 0;
   updateStage();
   drawMap();
@@ -1151,21 +1189,25 @@ function analyze(src, rp) {
   }
   if (!found) { lostGrid(now); diagParse('noGrid', now); return; }
   // sub-pixel refinements are accepted quietly; a different scale (×2) is a different grid.
-  // Nothing but the "Scan again" button touches a ready map: such a frame is simply skipped.
+  // Nothing but the "Scan again" button touches a ready map: a frame with another cell size is simply skipped,
+  // and so is one with a slightly different size (a tooltip or the cursor spoiled the lines), or the size would
+  // creep away from the real one while the map is ready.
+  if (phase === 'frozen' && frozenP && Math.abs(found.P - frozenP) > frozenP * 0.03) { lostGrid(now); return; }
   if (Math.abs(found.P - P) > P * 0.1) {
-    if (phase === 'frozen') { lostGrid(now); return; }
     viewport = null; prevSig = null; ring = []; cargo = new Map(); results = new Map(); listTopR = null;
     sbKnown = null; noBarCount = 0; phase = 'scan'; frozenPlaced = null; sawTop = sawEnd = false; stableCount = 0;
   }
   P = found.P;
   const grid = found.grid;
   // cargo in the game is always grey, an empty slot is black (sometimes with a dot).
-  // 1×1 is not scanned: reds and anything valuable never drop from it, and confirming and reading them takes time.
-  let items = found.items.filter(it => it.occ >= OCC_GREY && it.w * it.h > 1);
+  // 1×1 cargo are scanned too: no reds drop from them, but gold ones do (Gold Pen, Jade Bracelet, Gold Cube).
+  // A grey empty slot (the right column, often with a dot) looks just like one, so a 1×1 must show its label.
+  let items = found.items.filter(it => it.occ >= OCC_GREY && (it.w * it.h > 1 || it.detail >= ONE_LABEL_MIN));
   if (!items.length) { lostGrid(now); diagParse('noGrid', now); return; }
   diagParse('ok', now);
   // the merchant was closed and reopened in the middle of a scan: this is a different list
-  if (phase !== 'frozen' && gridSeenAt && now - gridSeenAt > REOPEN_MS && cargo.size) { log(tr('log.reopen')); resetScan(); }
+  // (resetScan clears the cell size: this frame's one is kept, or the rest of the parse would place cargo with P = 0)
+  if (phase !== 'frozen' && gridSeenAt && now - gridSeenAt > REOPEN_MS && cargo.size) { log(tr('log.reopen')); resetScan(); P = found.P; }
   gridSeenAt = now;
 
   // The visible part of the list. The scrollbar on the right gives it most precisely: the track runs from the top to
@@ -1175,7 +1217,8 @@ function analyze(src, rp) {
   // The whole scrollbar is searched once, later only the thumb on the track found. Once the scrollbar has been
   // seen, a frame without a thumb is skipped: another way of counting rows would shift the map.
   let sb = Vision.scrollbar(G, grid, sbKnown);
-  if (sb && !sbKnown) { sbKnown = { x: sb.x, trackTop: sb.trackTop, trackLen: sb.trackLen, thumbLen: sb.thumbLen }; log(tr('log.bar')); }
+  // (with thumbTop: a list that fits without scrolling gives back this very object every frame)
+  if (sb && !sbKnown) { sbKnown = { x: sb.x, trackTop: sb.trackTop, trackLen: sb.trackLen, thumbTop: sb.thumbTop, thumbLen: sb.thumbLen }; if (!loggedBar) log(tr('log.bar')); loggedBar = true; }
   // The thumb length changes only together with the list (after a purchase). Suddenly different: the cursor or
   // a tooltip spoiled the scrollbar, the frame is skipped. A new length is accepted once it holds.
   if (sb && sbKnown && Math.abs(sb.thumbLen - sbKnown.thumbLen) > sbKnown.thumbLen * THUMB_TOLERANCE) {
@@ -1351,6 +1394,7 @@ function overlapsFrozen(rec) {
 function freeze(message) {
   if (phase === 'frozen') return;
   frozenPlaced = placedCargo();
+  frozenP = P;
   phase = 'frozen';
   log(message);
   updateStage();
@@ -1638,8 +1682,26 @@ function cargoRedOdds(rec) {
   }
   if (!total) return null;
   items.forEach(x => { x.p /= total; });
+  // purchases of cargo with this label (and about this price) refine the odds, like purchases refine a sound
+  const seen = labelCounts(rec.label && labelName(rec.label), rec.price);
+  const n = items.reduce((a, x) => a + (seen.get(x.it.id) || 0), 0);
+  if (n) items.forEach(x => { x.p = (PRIOR_N * x.p + (seen.get(x.it.id) || 0)) / (PRIOR_N + n); });
+  red = items.reduce((a, x) => a + (x.it.q === 'red' ? x.p : 0), 0);
   items.sort((a, b) => order(a.it.q) - order(b.it.q) || b.p - a.p);
-  return { red: red / total, items };
+  return { red, items };
+}
+
+// How many times each item dropped from cargo with this label (and, if given, about this price: within the
+// tooltip price tolerance), from the shared base and own purchases: id → count
+function labelCounts(label, price) {
+  const out = new Map();
+  if (!label) return out;
+  for (const b of allPurchases()) {
+    if (b.label !== label || b.itemId == null) continue;
+    if (price && !(b.price && Math.abs(Math.log(b.price / price)) <= PRICE_MATCH_LOG)) continue;
+    out.set(b.itemId, (out.get(b.itemId) || 0) + 1);
+  }
+  return out;
 }
 
 // ---------- Payback ----------
@@ -1748,6 +1810,7 @@ function detectHover(frame) {
     rec.price = tip.price;
     rec.listPrice = tip.listPrice || 0;
     if (tip.label && !rec.label) rec.label = tip.label;
+    rec.hoverAt = Date.now(); // for a purchase made without dragging (ownPurchase)
     // with the cursor the outline follows the cursor itself (it may have moved on while the tooltip was read)
     if (!cursorTrack.length) hover = { key, t: performance.now() };
     if (!lastResult || Date.now() - lastResult.t > RESULT_HOLD_MS || (hover && hover.key === key)) showHover(rec);
@@ -1786,17 +1849,43 @@ function readLabel(rec, x, y, w, h, now) {
   if (now - (rec.labelAt || -Infinity) < LABEL_RETRY_MS) return;
   rec.labelAt = now;
   rec.labelBusy = true;
-  const crop = Ocr.labelCanvas(fullCanvas, x, y, w, h, P);
+  const crop = Ocr.labelCanvas(fullCanvas, x, y, w, h, P), lang = Ocr.lang();
   readLabel.n = (readLabel.n || 0) + 1;
   Ocr.read(crop, readLabel.n % 2 ? 'label' : 'label2') // two readers in turn: labels appear twice as fast
     .then(text => {
       rec.labelTries = (rec.labelTries || 0) + 1;
       const label = Ocr.parseLabel(text);
       if (label) { rec.label = label; if (mapVisible()) drawMap(); }
+      probeGameLang(lang, !!label);
     })
     .catch(e => { rec.labelTries = LABEL_TRIES; if (!readLabel.failed) log(tr('log.ocrFail', { msg: e.message || e })); readLabel.failed = true; })
     .finally(() => { rec.labelBusy = false; });
 }
+
+// The game language. In auto mode the language found last time is used first; if LANG_PROBE labels in a row
+// are read in it without a single known one, the other language is tried (once per session each way).
+function applyGameLang() {
+  const l = gameLang.choice === 'auto' ? gameLang.found : gameLang.choice;
+  if (typeof Ocr === 'undefined' || Ocr.lang() === l) return;
+  Ocr.setLang(l);
+  for (const rec of cargo.values()) if (!rec.label) rec.labelTries = 0; // read again in the new language
+  feedSig = balanceSig = null;
+}
+
+function probeGameLang(lang, hit) {
+  const st = langStats[lang] || (langStats[lang] = { reads: 0, hits: 0 });
+  st.reads++; if (hit) st.hits++;
+  if (gameLang.choice !== 'auto' || lang !== Ocr.lang()) return;
+  if (hit && gameLang.found !== lang) { gameLang.found = lang; saveGameLang(); }
+  const other = lang === 'eng' ? 'rus' : 'eng', o = langStats[other];
+  if (st.hits || st.reads < LANG_PROBE || (o && o.reads >= LANG_PROBE)) return;
+  gameLang.found = other;
+  saveGameLang();
+  applyGameLang();
+  log(tr('log.gameLang', { lang: other === 'rus' ? 'Русский' : 'English' }));
+}
+
+function saveGameLang() { try { localStorage.setItem(GAME_LANG_KEY, JSON.stringify(gameLang)); } catch {} }
 
 // ---------- Purchases ----------
 // After a purchase the game writes above the grid: "nick spent 200,000 Koen on a mystery cargo and obtained [item]".
@@ -1807,7 +1896,12 @@ function readFeed(G, grid, now) {
   if (feedBusy || now - feedAt < FEED_MS || typeof Ocr === 'undefined' || !viewport) return;
   feedAt = now;
   const x = Math.max(0, Math.round(grid.x0)), w = Math.round(Math.min(grid.cols * P, G.w - x));
-  const y = Math.max(0, Math.round(viewport.y - P * FEED_TOP)), h = Math.round(viewport.y - P * FEED_BOTTOM) - y;
+  // without the button at the right end of the line: it is read as stray letters after the item name
+  const bands = FEED_BANDS.map(([top, bottom]) => {
+    const y = Math.max(0, Math.round(viewport.y - P * top));
+    return { x, y, w: Math.round(w - P * FEED_RIGHT_CUT), h: Math.round(viewport.y - P * bottom) - y };
+  });
+  const y = bands[0].y, h = bands[bands.length - 1].y + bands[bands.length - 1].h - y; // both bands: to notice a change
   // the balance is in the right half below the list
   const bx = Math.round(grid.x0 + grid.cols * P * BALANCE_LEFT), bw = Math.round(Math.min(grid.x0 + grid.cols * P + P * 0.3, G.w) - bx);
   const by = Math.round(viewport.y + viewport.h), bh = Math.round(Math.min(G.h, by + P * BALANCE_BELOW) - by);
@@ -1822,46 +1916,98 @@ function readFeed(G, grid, now) {
   if (fs) feedSig = fs;
   if (bs) balanceSig = bs;
   feedBusy = true;
-  const read = r => Ocr.readData(Ocr.tipCanvas(fullCanvas, r.x, r.y, r.w, r.h, P), 'feed').then(d => d.text); // own reader: labels queued during a scan would delay purchase detection
+  // own readers: labels queued during a scan would delay purchase detection
+  const readBalance = () => Ocr.read(Ocr.tipCanvas(fullCanvas, bx, by, bw, bh, P), 'balance');
   // the balance first: the purchase line and the balance drop usually appear together
-  (bs ? read(balR).then(t => { const v = Ocr.parseBalance(t); if (v) onBalance(v); }) : Promise.resolve())
-    .then(() => fs ? read(feedR).then(t => { const f = Ocr.parseFeed(t); if (f) onFeed(f); }) : null)
+  (bs ? readBalance().then(t => { const v = Ocr.parseBalance(t); if (v) onBalance(v); }) : Promise.resolve())
+    .then(async () => {
+      if (!fs) return;
+      for (const r of bands) {
+        const t = await Ocr.read(Ocr.feedCanvas(fullCanvas, r.x, r.y, r.w, r.h, P), 'feed');
+        let f = Ocr.parseFeed(t);
+        // the item was not recognized: the plain grayscale sometimes reads small white names better
+        if (f && !feedItem(f.item)) {
+          const f2 = Ocr.parseFeed(await Ocr.read(Ocr.tipCanvas(fullCanvas, r.x, r.y, r.w, r.h, P), 'feed'));
+          if (f2 && f2.price === f.price && feedItem(f2.item)) f = f2;
+        }
+        if (f) { onFeed(f); break; }
+      }
+    })
     .catch(() => { feedSig = balanceSig = null; })
     .finally(() => { feedBusy = false; processFeed(); });
 }
 
 function onBalance(v) {
-  if (balance !== null && v < balance) spent += balance - v;
+  if (balance !== null && v < balance) { spent += balance - v; spentAt = performance.now(); }
   balance = v;
 }
 
 // A feed line waits in the queue until the balance confirms (or refutes) the purchase.
 // The same line read slightly differently ("Rebrut"/"Rebcut") is the same purchase: not added twice.
 function onFeed(feed) {
-  const now = performance.now();
-  const dup = feedQueue.concat(feedDone).some(f => f.price === feed.price && now - f.at < FEED_SAME_MS && Ocr.matchName(f.item, [{ name: feed.item }]));
-  if (!dup) feedQueue.push({ ...feed, at: now });
+  const now = performance.now(), it = feedItem(feed.item);
+  const dup = feedQueue.some(f => f.price === feed.price && (it ? f.it === it : Ocr.matchName(f.item, [{ name: feed.item }])))
+    // a late reading of a line already counted: the same amount and the same item, or an item not read at all
+    || feedDone.some(f => f.price === feed.price && now - f.at < FEED_SAME_MS && (it ? f.it === it : true));
+  if (!dup) feedQueue.push({ ...feed, it, at: now });
 }
 
+// Items as { name, it } for matching a read name: the English name and the Russian one (the game may be in either)
+function itemNames(list) {
+  return list.flatMap(x => [x.nameEn, x.name].filter((n, i, a) => n && a.indexOf(n) === i).map(name => ({ name, it: x })));
+}
+
+// The item named in a feed line, or null when the line was misread
+function feedItem(text) {
+  const m = Ocr.matchName(text, itemNames([...itemById.values()]));
+  return m ? m.it : null;
+}
+
+// Own purchases are the lines whose amounts add up to exactly what the balance dropped by: one line, or a few
+// for a cart. Other players' lines (another amount) stay unmatched and expire. The same line is read many times,
+// often garbled: readings with the same amount and item (or no item) are one purchase, and the reading that
+// names an item is the one recorded; a garbled one is taken only if no better reading comes within a few seconds.
 function processFeed() {
   const now = performance.now();
   feedQueue = feedQueue.filter(f => now - f.at < FEED_WAIT_MS);
   feedDone = feedDone.filter(f => now - f.at < FEED_SAME_MS);
-  for (const f of [...feedQueue]) {
-    if (spent < f.price * (1 - BUY_MATCH)) continue; // the balance did not drop by this amount: someone else bought it
-    spent = Math.max(0, spent - f.price);
-    feedQueue.splice(feedQueue.indexOf(f), 1);
-    feedDone.push(f);
-    ownPurchase(f);
+  if (spent && now - spentAt >= FEED_WAIT_MS) spent = 0; // a balance drop that matches no purchase line (a repair, a stash fee…)
+  if (!spent || !feedQueue.length) return;
+  const groups = [];
+  for (const f of feedQueue) {
+    const it = f.it !== undefined ? f.it : (f.it = feedItem(f.item));
+    let g = groups.find(g => g.price === f.price && (!it || !g.it || g.it === it));
+    if (!g) groups.push(g = { price: f.price, it: null, lines: [] });
+    g.lines.push(f);
+    if (it && !g.it) g.it = it;
+  }
+  groups.sort((a, b) => Math.max(...b.lines.map(f => f.at)) - Math.max(...a.lines.map(f => f.at))); // the newest line first
+  const near = (sum, v) => Math.abs(sum - v) <= v * BUY_MATCH;
+  let pick = null;
+  for (let size = 1; size <= Math.min(4, groups.length) && !pick; size++) {
+    const walk = (from, chosen, sum) => {
+      if (chosen.length === size) { if (near(sum, spent)) pick = chosen; return; }
+      for (let i = from; i < groups.length && !pick; i++) walk(i + 1, [...chosen, groups[i]], sum + groups[i].price);
+    };
+    walk(0, [], 0);
+  }
+  if (!pick) return;
+  if (pick.some(g => !g.it) && now - spentAt < FEED_BEST_MS) return; // a better reading of the item may still come
+  spent = 0;
+  for (const g of pick) {
+    const best = g.lines.filter(f => f.it === g.it).sort((a, b) => b.at - a.at)[0];
+    feedQueue = feedQueue.filter(f => !g.lines.includes(f));
+    feedDone.push(...g.lines);
+    ownPurchase(best);
   }
 }
 
 function ownPurchase({ price, item }) {
   // What dropped is known from the line, so the bought cargo must fit it: its sound holds this item and its size
-  // is the item's size. Many cargo share a price (200k, 250k…) and 1×1 cargo are not on the map at all, so "the last
+  // is the item's size. Many cargo share a price (200k, 250k…) and a cargo may be missing from the map, so "the last
   // sound heard" would often be another cargo's sound. Of several fitting cargo with this price the one heard last
-  // is taken; if none fits, the purchase is kept without a sound.
-  const named = [...itemById.values()].map(x => ({ name: x.nameEn || x.name, it: x }));
+  // is taken; if none fits, the hovered cargo of that label is taken without a sound (below).
+  const named = itemNames([...itemById.values()]);
   const m = Ocr.matchName(item, named), it = m && m.it;
   const fits = (key, res) => {
     const rec = cargo.get(key), s = res && soundById(res.soundId);
@@ -1875,6 +2021,15 @@ function ownPurchase({ price, item }) {
   let key = byPrice ? byPrice[0] : null, res = byPrice ? byPrice[1] : null;
   // the price was not read (no hover): the last sound heard within 3 min, but only if it fits the item
   if (!byPrice && lastResult && Date.now() - lastResult.t < 180e3 && lastResult.key && fits(lastResult.key, lastResult)) { key = lastResult.key; res = lastResult; }
+  // bought without dragging: the hovered cargo with this price whose pools hold the item and whose size is the
+  // item's size (the one hovered last); it is recorded without a sound, with its label and price, and refines
+  // the label + price odds (cargoRedOdds)
+  if (!key && it) {
+    const byLabel = placedCargo().filter(([, r]) => r.price && !r.bought && r.label && Math.abs(r.price - price) <= price * BUY_MATCH
+      && normSize(`${r.w}x${r.h}`) === normSize(it.size) && (((cargoInfo(r) || {}).priceW) || new Map()).has(it.id))
+      .sort((a, b) => (b[1].hoverAt || 0) - (a[1].hoverAt || 0))[0];
+    if (byLabel) key = byLabel[0];
+  }
   const rec = key && cargo.get(key);
   recordPurchase({ soundId: res && res.soundId, size: rec ? normSize(`${rec.w}x${rec.h}`) : '', label: cargoInfo(rec), price, itemText: item, itemId: it ? it.id : null, key });
 }
@@ -1883,10 +2038,12 @@ function ownPurchase({ price, item }) {
 function dropMismatchedSounds() {
   let changed = false;
   purchases = purchases.map(b => {
-    const s = b.soundId && soundById(b.soundId);
-    if (!s || b.itemId == null || s.items.some(x => x.id === b.itemId)) return b;
+    const s = b.soundId && soundById(b.soundId), it = b.itemId != null && itemById.get(b.itemId);
+    const badSound = s && it && !s.items.some(x => x.id === b.itemId);
+    const badSize = it && b.size && normSize(b.size) !== normSize(it.size); // a cargo of another size than the item
+    if (!badSound && !badSize) return b;
     changed = true;
-    return { ...b, soundId: null };
+    return { ...b, soundId: null, label: '', size: '' }; // the whole cargo pairing was wrong, not only the sound
   });
   if (changed) savePurchases();
 }
@@ -1896,7 +2053,7 @@ function recordPurchase({ soundId, size, label, price, itemText, itemId, key }) 
   const sound = soundId && soundById(soundId);
   let it = itemId != null ? itemById.get(itemId) || (sound && sound.items.find(x => String(x.id) === String(itemId))) : null;
   if (!it && itemText) {
-    const named = list => list.map(x => ({ name: x.nameEn || x.name, it: x }));
+    const named = itemNames;
     const m = (sound && Ocr.matchName(itemText, named(sound.items))) || Ocr.matchName(itemText, named([...itemById.values()]));
     it = m && m.it;
   }
@@ -2009,6 +2166,8 @@ function drawMapInner() {
   const ranking = rankCargo();
   const rankOf = new Map(ranking.filter(x => x.pb.verdict !== 'skip').slice(0, buysPerRaid).map((x, i) => [x.key, i + 1]));
   renderRank(ranking, rankOf);
+  checkAlerts(ranking);
+  renderSession();
   const hoverKey = hover && performance.now() - hover.t < HOVER_KEEP_MS ? hover.key : null;
   // Over every cargo: the hovered one is outlined, the best buys get a badge, a known price shows the payback
   const decorate = (key, rec, x, y, w, h) => {
@@ -2203,6 +2362,46 @@ function renderRank(ranking, rankOf) {
   }).join('');
 }
 
+// Summary of this session's purchases: count, Koen spent, reds and what the items are worth. It also shows
+// right away whether a purchase was recorded at all.
+function renderSession() {
+  const mine = purchases.filter(b => b.t >= sessionStart);
+  const head = `<div class="head">${esc(tr('session.title'))}<button class="small" id="btnSessionReset">${esc(tr('session.reset'))}</button></div>`;
+  if (!mine.length) { $('session').innerHTML = head + `<div class="muted">${esc(tr('session.none'))}</div>`; return; }
+  let spentK = 0, value = 0, reds = 0;
+  for (const b of mine) {
+    const it = b.itemId != null && itemById.get(b.itemId);
+    spentK += b.price || 0;
+    if (it) value += itemValue(it);
+    if ((it ? it.q : b.q) === 'red') reds++;
+  }
+  const diff = spentK ? value / spentK - 1 : 0;
+  const last = mine[mine.length - 1];
+  $('session').innerHTML = head + `<div>${esc(tr('session.line', { n: mine.length, spent: money(spentK), red: reds, value: money(value) }))}
+    <b style="color:${diff >= 0 ? UI.good : UI.bad}">(${diff > 0 ? '+' : ''}${pct(diff)})</b></div>
+    <div class="muted">${esc(tr('session.last', { item: last.item || '?' }))}</div>`;
+}
+$('session').addEventListener('click', e => {
+  if (e.target.id !== 'btnSessionReset') return;
+  sessionStart = Date.now();
+  try { sessionStorage.setItem(SESSION_KEY, String(sessionStart)); } catch {}
+  renderSession();
+});
+
+// A chime when a hovered cargo turns out good: it pays off or has a high red chance. Once per cargo; cargo
+// already dragged are skipped (their sound result beeps by itself).
+function checkAlerts(ranking) {
+  if (!alertOn || phase !== 'frozen') return;
+  for (const x of ranking) {
+    if (x.heard) continue;
+    const sig = `${x.key}|${x.rec.price}|${x.rec.label ? labelName(x.rec.label) : ''}`;
+    if (alerted.has(sig) || (x.pb.verdict !== 'buy' && x.red < ALERT_RED)) continue;
+    alerted.add(sig);
+    log(tr('log.alert', { cargo: cargoHead(x.rec), red: pctFine(x.red), roi: (x.pb.roi >= 0 ? '+' : '') + pct(x.pb.roi) }));
+    if (performance.now() >= muteUntil) chime([784, 1047, 1568]);
+  }
+}
+
 // Item picture fitted into a rectangle keeping the proportions
 function drawItemIcon(c, it, x, y, w, h) {
   const img = it.img && cachedImage(it.img);
@@ -2250,8 +2449,11 @@ function canvasPos(canvas, e) {
 
 // ---------- Beep ----------
 function beep(redChance) {
+  chime(redChance >= 0.5 ? [1320, 1320, 1320] : redChance > 0 ? [990, 1320] : [520]);
+}
+
+function chime(pattern) {
   beepCtx = beepCtx || new AudioContext();
-  const pattern = redChance >= 0.5 ? [1320, 1320, 1320] : redChance > 0 ? [990, 1320] : [520];
   let t = beepCtx.currentTime;
   for (const f of pattern) {
     const o = beepCtx.createOscillator(), g = beepCtx.createGain();
@@ -2540,6 +2742,13 @@ ui.valueBasis.onchange = () => {
   try { localStorage.setItem(VALUE_KEY, JSON.stringify(valueBasis)); } catch {}
   drawMap();
 };
+const alertBox = $('alertOn');
+alertBox.checked = alertOn;
+alertBox.onchange = () => { alertOn = alertBox.checked; try { localStorage.setItem(ALERT_KEY, JSON.stringify(alertOn)); } catch {} };
+const gameLangBox = $('gameLang');
+gameLangBox.value = ['auto', 'eng', 'rus'].includes(gameLang.choice) ? gameLang.choice : 'auto';
+gameLangBox.onchange = () => { gameLang.choice = gameLangBox.value; langStats = {}; saveGameLang(); applyGameLang(); };
+applyGameLang();
 
 function addSound() {
   const name = ui.newName.value.trim();
@@ -2648,7 +2857,7 @@ async function openOverlay() {
   left.className = 'ov-map'; right.className = 'ov-side';
   box.append(left, right);
   w.document.body.append(box);
-  overlayParts = [[$('mapWrap'), left], [document.querySelector('.stage'), right], [ui.result, right], [ui.rank, right]].map(([el, to]) => {
+  overlayParts = [[$('mapWrap'), left], [document.querySelector('.stage'), right], [ui.result, right], [ui.rank, right], [$('session'), right]].map(([el, to]) => {
     const ph = document.createComment('overlay');
     el.replaceWith(ph);
     to.append(el);
@@ -2687,13 +2896,43 @@ langSelect.value = I18n.lang;
 langSelect.onchange = () => {
   I18n.setLang(langSelect.value);
   if (stream) showGameStatus(gameStatus);
-  syncLabels(); renderProfiles(); renderSounds(); updateStage(); drawMap();
+  syncLabels(); renderProfiles(); renderSounds(); updateStage(); drawMap(); renderSession(); renderVersion();
 };
+
+// ---------- Version and updates ----------
+// The site version is version.json next to the page (inside the exe: the exe version); the client sends its own
+// in the status. A newer release on GitHub shows up in the header as a download link.
+const verNum = v => String(v || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+function newerVersion(a, b) {
+  const x = verNum(a), y = verNum(b);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  return false;
+}
+function renderVersion() {
+  const cv = gameStatus && gameStatus.version;
+  $('ver').textContent = siteVersion ? 'v' + siteVersion + (cv && cv !== siteVersion ? ' · ' + tr('ver.client', { v: cv }) : '') : '';
+  // what this player runs: the client if it is connected, otherwise the site (the exe serves its own)
+  const mine = cv || siteVersion, a = $('update');
+  a.hidden = !(latestRelease && mine && newerVersion(latestRelease.v, mine));
+  if (!a.hidden) { a.textContent = tr('update.available', { v: latestRelease.v }); a.href = latestRelease.url; }
+}
+async function checkUpdate() {
+  try { siteVersion = (await (await fetch('version.json', { cache: 'no-cache' })).json()).version || ''; } catch {}
+  try {
+    const rel = await (await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { cache: 'no-cache' })).json();
+    const v = String(rel.tag_name || '').replace(/^v/, '');
+    if (/^\d+(\.\d+)*$/.test(v) && String(rel.html_url).startsWith(`https://github.com/${REPO}/`)) latestRelease = { v, url: rel.html_url };
+  } catch {} // offline or rate limited: stay quiet
+  renderVersion();
+}
+checkUpdate();
+setInterval(checkUpdate, 6 * 3600e3);
 
 I18n.apply();
 syncLabels();
 renderProfiles();
 renderSounds();
+renderSession();
 try { OLD_PURCHASE_KEYS.forEach(k => localStorage.removeItem(k)); } catch {}
 loadBase();
 autoLoadLibrary();

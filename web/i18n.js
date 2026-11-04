@@ -5,6 +5,10 @@ const I18n = (() => {
   const DICT = {
     uk: {
       'app': 'Merchant Ear',
+      'lbl.alert': 'Сигнал', 'tip.alert': 'Звуковий сигнал, коли наведений вантаж окупається або має 25%+ шансу на червоний', 'log.alert': 'Вигідний вантаж: {cargo} — червоний {red}, окупність {roi}',
+      'session.title': 'Ця сесія', 'session.reset': 'Скинути', 'session.none': 'Покупок ще немає. Купи вантаж під час ловлі — він зʼявиться тут.', 'session.line': 'Куплено {n} за {spent} · червоних: {red} · вартість ~{value}', 'session.last': 'Остання: {item}',
+      'opt.gameAuto': 'Гра: авто', 'opt.gameEng': 'Гра: English', 'opt.gameRus': 'Гра: Русский', 'tip.gameLang': 'Мова гри: від неї залежить, як читаються мітки вантажів, рядок покупки і баланс', 'log.gameLang': 'Мова гри: {lang}',
+      'update.available': 'Вийшла v{v} — завантажити', 'ver.client': 'клієнт v{v}',
       'btn.start': 'Почати ловлю', 'btn.stop': 'Зупинити', 'status.idle': 'Не запущено',
       'h.result': 'Результат', 'result.wait': 'Чекаю на звук…',
       'btn.done': 'Готово', 'btn.rescan': 'Шукати заново',
@@ -82,6 +86,10 @@ const I18n = (() => {
     },
     en: {
       'app': 'Merchant Ear',
+      'lbl.alert': 'Alert', 'tip.alert': 'A chime when a hovered cargo pays off or has a 25%+ red chance', 'log.alert': 'Good cargo: {cargo}, red {red}, payback {roi}',
+      'session.title': 'This session', 'session.reset': 'Reset', 'session.none': 'No purchases yet. Buy a cargo while catching and it shows up here.', 'session.line': 'Bought {n} for {spent} · reds: {red} · worth ~{value}', 'session.last': 'Last: {item}',
+      'opt.gameAuto': 'Game: auto', 'opt.gameEng': 'Game: English', 'opt.gameRus': 'Game: Russian', 'tip.gameLang': 'Game language: cargo labels, the purchase line and the balance are read in it', 'log.gameLang': 'Game language: {lang}',
+      'update.available': 'v{v} is out — download', 'ver.client': 'client v{v}',
       'btn.start': 'Start catching', 'btn.stop': 'Stop', 'status.idle': 'Not running',
       'h.result': 'Result', 'result.wait': 'Waiting for a sound…',
       'btn.done': 'Done', 'btn.rescan': 'Scan again',
@@ -159,6 +167,10 @@ const I18n = (() => {
     },
     ru: {
       'app': 'Merchant Ear',
+      'lbl.alert': 'Сигнал', 'tip.alert': 'Звуковой сигнал, когда наведённый груз окупается или даёт 25%+ шанса на красный', 'log.alert': 'Выгодный груз: {cargo} — красный {red}, окупаемость {roi}',
+      'session.title': 'Эта сессия', 'session.reset': 'Сбросить', 'session.none': 'Покупок пока нет. Купи груз во время ловли — он появится здесь.', 'session.line': 'Куплено {n} за {spent} · красных: {red} · стоимость ~{value}', 'session.last': 'Последняя: {item}',
+      'opt.gameAuto': 'Игра: авто', 'opt.gameEng': 'Игра: English', 'opt.gameRus': 'Игра: Русский', 'tip.gameLang': 'Язык игры: на нём читаются метки грузов, строка покупки и баланс', 'log.gameLang': 'Язык игры: {lang}',
+      'update.available': 'Вышла v{v} — скачать', 'ver.client': 'клиент v{v}',
       'btn.start': 'Начать ловлю', 'btn.stop': 'Остановить', 'status.idle': 'Не запущено',
       'h.result': 'Результат', 'result.wait': 'Жду звук…',
       'btn.done': 'Готово', 'btn.rescan': 'Искать заново',

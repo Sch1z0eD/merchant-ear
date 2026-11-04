@@ -15,10 +15,13 @@ The Field Merchant sells closed cargo: you only see its label, price and size. B
 
 - **Recognition by sound.** The drag sound is matched against a library of 38 sound groups (189 items). A sharp-attack check filters out false triggers from wind and music.
 - **Cargo under the cursor.** The client reports the cursor position: the cargo you hover is outlined at once, and a sound belongs to the cargo that was under the cursor at the moment of the click.
-- **Merchant map.** The grid is found automatically, labels are read by OCR, and a map of the whole list is built while you scroll; the part on screen is outlined. After a purchase the map rebuilds itself, and "Scan again" is instant.
+- **Merchant map.** The grid is found automatically, labels are read by OCR, and a map of the whole list is built while you scroll (1×1 cargo too: gold items drop from them); the part on screen is outlined. After a purchase the map rebuilds itself, and "Scan again" is instant.
 - **Exact odds.** A cargo's pool is picked by its label, price and size: every pool holds items of one size, so items of another size are ruled out. With a discount, the crossed-out price picks the pool.
 - **Payback and best buys.** For every cargo with a known price: mean value, chance to pay off, and a verdict — worth buying / a gamble / will not pay off. The best buys are badged on the map (#1, #2…, by your purchases per raid: 2, 3 or 4). Value by the trader hand-in price, the field merchant (+10%) or the market.
-- **Purchase log.** The "… spent … Koen … obtained […]" line and your balance confirm your own purchase; it refines the odds for the future.
+- **Purchase log.** The "… spent … Koen … obtained […]" line confirms your own purchase only when your balance fell by exactly that amount, so other players' lines are ignored. It refines the odds for the future: by the sound, or by the label and price if you bought without dragging.
+- **Alert and session summary.** A chime when a hovered cargo pays off or has a 25%+ red chance; under the map, this session's purchases, Koen spent, reds and value.
+- **English and Russian game.** The game language is detected from the cargo labels (or picked in the settings); labels, the purchase line and the balance are read in either.
+- **Updates.** The header shows the version; when a newer release is out, a download link appears.
 - **Overlay.** A one-monitor mode: a small window over the game with the map on the left and the result and best buys on the right.
 - **Interface** in Ukrainian, English and Russian.
 
@@ -89,7 +92,7 @@ How to put the site on your own server with HTTPS and a password: [web/README.md
 
 - The odds come from the merchant tables (abibuilder.com / abi-tracker data), not from live statistics. Payback uses the table prices of the items.
 - Many items share one sound: inside a sound group the item is told apart only by the pool weights.
-- Cargo labels are read only with the English game client. The grid, sound and prices work in any language.
+- Cargo labels, the purchase line and the balance are read in the English and the Russian game. The grid, sound and prices work in any language.
 - Borderless window mode is required: in exclusive fullscreen the frame comes out black.
 
 ## Disclaimer

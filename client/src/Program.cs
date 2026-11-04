@@ -9,13 +9,16 @@ namespace MerchantEar.Client
 {
     public static class Program
     {
+        // x.y.z from <Version> in the project (a release build takes it from the tag)
+        public static readonly string Version = typeof(Program).Assembly.GetName().Version.ToString(3);
+
         public static int Main(string[] args)
         {
             Console.OutputEncoding = Encoding.UTF8;
-            Console.Title = "Merchant Ear";
+            Console.Title = "Merchant Ear " + Version;
             var s = Settings.Load(args);
             string site = "http://localhost:" + s.Port + "/";
-            Console.WriteLine("Merchant Ear: " + (SiteFiles.Has ? site : "ws://localhost:" + s.Port) + "  (game: " + s.Exe + ".exe)");
+            Console.WriteLine("Merchant Ear " + Version + ": " + (SiteFiles.Has ? site : "ws://localhost:" + s.Port) + "  (game: " + s.Exe + ".exe)");
             Console.WriteLine("Allowed sites: localhost" + (s.AllowedOrigins.Count > 0 ? ", " + string.Join(", ", s.AllowedOrigins) : ""));
             Console.WriteLine("Capturing sound and picture from the game only. Close this window to stop.");
             try

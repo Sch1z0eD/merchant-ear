@@ -2,40 +2,56 @@
 // Reading text from the game picture: cargo labels in the merchant grid, the price tooltip, the feed and the balance.
 // Tesseract (open-source OCR) is bundled in lib/tesseract, no internet needed.
 const Ocr = (() => {
+  // ru — the labels in the Russian game. The ones seen in the game are listed first; the others are guesses,
+  // so several spellings are given.
   const LABELS = [
-    { key: 'raremysterycargo', mystery: 'rare' },
-    { key: 'uncommonmysterycargo', mystery: 'uncommon' },
-    { key: 'mysterycargo', mystery: 'common' },
-    // name — the label exactly as the merchant pools have it (library/merchant.json), category — the item category
-    { key: 'uncommonmilitaryitems', category: 'Miscellaneous Military Item', name: 'Uncommon Military Items' },
-    { key: 'militaryitems', category: 'Miscellaneous Military Item', name: 'Military Items' },
-    { key: 'raremedicalsupplies', category: 'Miscellaneous Medical Item', name: 'Rare Medical Supplies' },
-    { key: 'medicalsupplies', category: 'Miscellaneous Medical Item', name: 'Medical Supplies' },
-    { key: 'computerparts', category: 'Computer Parts', name: 'Computer Parts' },
-    { key: 'rarecollectibles', category: 'Collectibles', name: 'Rare Collectibles' },
-    { key: 'uncommoncollectibles', category: 'Collectibles', name: 'Uncommon Collectibles' },
-    { key: 'collectibles', category: 'Collectibles', name: 'Collectibles' },
-    { key: 'instruments', category: 'Instruments', name: 'Instruments' },
-    { key: 'energyitems', category: 'Energy Items', name: 'Energy Items' },
-    { key: 'householditems', category: 'Household Items', name: 'Household Items' },
-    { key: 'buildingmaterials', category: 'Building Materials', name: 'Building Materials' },
-    { key: 'electronics', category: 'Electronics', name: 'Electronics' },
-    { key: 'flammables', category: 'Flammables', name: 'Flammables' },
-    { key: 'tools', category: 'Tools', name: 'Tools' },
-    { key: 'paper', category: 'Paper', name: 'Paper' },
+    { key: 'raremysterycargo', ru: ['редкий таинственный груз'], mystery: 'rare' },
+    { key: 'uncommonmysterycargo', ru: ['необычный таинственный груз'], mystery: 'uncommon' },
+    { key: 'mysterycargo', ru: ['таинственный груз'], mystery: 'common' },
+    // name — exactly the merchant label of the pools (merchant.json "label"); rare/uncommon category cargo can hold reds
+    { key: 'uncommonmilitaryitems', ru: ['необычные военные предметы', 'необычное военное снаряжение'], category: 'Miscellaneous Military Item', name: 'Uncommon Military Items' },
+    { key: 'militaryitems', ru: ['военные предметы', 'военное снаряжение'], category: 'Miscellaneous Military Item', name: 'Military Items' },
+    { key: 'raremedicalsupplies', ru: ['редкие медикаменты', 'редкие медицинские принадлежности', 'редкие медицинские материалы'], category: 'Miscellaneous Medical Item', name: 'Rare Medical Supplies' },
+    { key: 'medicalsupplies', ru: ['медикаменты', 'медицинские принадлежности', 'медицинские материалы'], category: 'Miscellaneous Medical Item', name: 'Medical Supplies' },
+    { key: 'computerparts', ru: ['компьютерные комплектующие', 'комплектующие пк', 'компьютерные детали'], category: 'Computer Parts', name: 'Computer Parts' },
+    { key: 'rarecollectibles', ru: ['редкие коллекционные предметы', 'редкие предметы коллекционирования'], category: 'Collectibles', name: 'Rare Collectibles' },
+    { key: 'uncommoncollectibles', ru: ['необычные коллекционные предметы', 'необычные предметы коллекционирования'], category: 'Collectibles', name: 'Uncommon Collectibles' },
+    { key: 'collectibles', ru: ['коллекционные предметы', 'предметы коллекционирования'], category: 'Collectibles', name: 'Collectibles' },
+    { key: 'instruments', ru: ['приборы', 'измерительные приборы'], category: 'Instruments', name: 'Instruments' },
+    { key: 'energyitems', ru: ['энергопредметы'], category: 'Energy Items', name: 'Energy Items' },
+    { key: 'householditems', ru: ['домашняя утварь'], category: 'Household Items', name: 'Household Items' },
+    { key: 'buildingmaterials', ru: ['стройматериалы'], category: 'Building Materials', name: 'Building Materials' },
+    { key: 'electronics', ru: ['электроника'], category: 'Electronics', name: 'Electronics' },
+    { key: 'flammables', ru: ['горючие материалы', 'горючее', 'легковоспламеняющиеся'], category: 'Flammables', name: 'Flammables' },
+    { key: 'tools', ru: ['инструменты'], category: 'Tools', name: 'Tools' },
+    { key: 'paper', ru: ['бумага'], category: 'Paper', name: 'Paper' },
   ];
+  // Letters only, lower case, ё as е: Latin for English text, Cyrillic for Russian
+  const latin = t => t.toLowerCase().replace(/[^a-z]/g, '');
+  const cyr = t => t.toLowerCase().replace(/ё/g, 'е').replace(/[^а-я]/g, '');
+  const KEYS = [
+    ...LABELS.map(l => ({ key: l.key, l, ru: false })),
+    ...LABELS.flatMap(l => l.ru.map(r => ({ key: cyr(r), l, ru: true }))),
+  ];
+
+  // The game language: 'eng' or 'rus'. All readers use the model of this language.
+  let gameLang = 'eng';
 
   // Separate readers in their own threads: cargo labels (there are many of them) and the price tooltip
   // (it is needed right away while the cursor is on the cargo, so it does not wait behind the labels)
   const lanes = {};
+  // The purchase line is read as a single text line (page segmentation 7): otherwise at low resolution it may be
+  // split into columns and read out of order.
+  const LANE_PARAMS = { feed: { tessedit_pageseg_mode: '7' } };
 
   function lane(name) {
     if (!lanes[name]) {
+      const worker = Tesseract.createWorker(gameLang, 1, {
+        workerPath: 'lib/tesseract/worker.min.js', corePath: 'lib/tesseract/', langPath: 'lib/tesseract',
+        gzip: true, workerBlobURL: false,
+      });
       lanes[name] = {
-        worker: Tesseract.createWorker('eng', 1, {
-          workerPath: 'lib/tesseract/worker.min.js', corePath: 'lib/tesseract/', langPath: 'lib/tesseract',
-          gzip: true, workerBlobURL: false,
-        }),
+        worker: LANE_PARAMS[name] ? worker.then(async w => { await w.setParameters(LANE_PARAMS[name]); return w; }) : worker,
         queue: Promise.resolve(),
       };
     }
@@ -44,7 +60,21 @@ const Ocr = (() => {
 
   // Start all readers at once (after "Start catching"): otherwise the first price or the first labels
   // would also wait for the start-up (~0.4 s). Labels are read by two readers in parallel.
-  function start() { return Promise.all(['label', 'label2', 'tip'].map(n => lane(n).worker)); }
+  function start() { return Promise.all(['label', 'label2', 'tip', 'feed'].map(n => lane(n).worker)); }
+
+  // Another game language: the readers are restarted with its model (reads already queued finish with the old one)
+  function setLang(l) {
+    if (l !== 'eng' && l !== 'rus') return;
+    if (l === gameLang) return;
+    gameLang = l;
+    const names = Object.keys(lanes);
+    for (const name of names) {
+      const old = lanes[name];
+      delete lanes[name];
+      old.queue.then(() => old.worker).then(w => w.terminate()).catch(() => {});
+    }
+    if (names.length) start().catch(() => {});
+  }
 
   function read(canvas, name = 'label') {
     return readData(canvas, name).then(data => data.text);
@@ -79,6 +109,29 @@ const Ocr = (() => {
     const ctx = c.getContext('2d');
     ctx.filter = 'grayscale(1) invert(1) contrast(1.4)';
     ctx.drawImage(src, x, y, w, h, 0, 0, c.width, c.height);
+    return c;
+  }
+
+  // Purchase line: grey text, but the item name is in its rarity colour (red, gold, purple…) on a grey panel,
+  // which turns grey in a plain grayscale. The brightest channel keeps any coloured text as light as white;
+  // then the panel is stretched to white and the text to black.
+  function feedCanvas(src, x, y, w, h, P) {
+    const k = tipScale(P);
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * k); c.height = Math.round(h * k);
+    c.ocrScale = k;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(src, x, y, w, h, 0, 0, c.width, c.height);
+    const img = ctx.getImageData(0, 0, c.width, c.height), d = img.data, n = c.width * c.height;
+    const v = new Uint8Array(n);
+    for (let i = 0; i < n; i++) v[i] = Math.max(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]);
+    const sorted = Array.from(v).sort((a, b) => a - b);
+    const lo = sorted[n >> 1], hi = Math.max(lo + 40, sorted[Math.floor(n * 0.995)]);
+    for (let i = 0; i < n; i++) {
+      const t = Math.max(0, Math.min(255, Math.round((v[i] - lo) * 255 / (hi - lo))));
+      d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = 255 - t;
+    }
+    ctx.putImageData(img, 0, 0);
     return c;
   }
 
@@ -233,41 +286,48 @@ const Ocr = (() => {
   // The closest known label. A label may be cut off ("Uncommo n Mus tory" in a narrow cell),
   // so it is compared with the start of a name of the same length. Returns the label description or null.
   function parseLabel(text) {
-    const s = text.toLowerCase().replace(/[^a-z]/g, '');
+    // Russian or English: by the letters there are more of
+    const ru = cyr(text).length > latin(text).length;
+    const s = ru ? cyr(text) : latin(text);
     if (s.length < 4) return null;
     let best = null, bestScore = Infinity;
-    for (const l of LABELS) {
-      const target = l.key.slice(0, Math.min(l.key.length, s.length + 2));
+    for (const k of KEYS) {
+      if (k.ru !== ru) continue;
+      const target = k.key.slice(0, Math.min(k.key.length, s.length + 2));
       const d = distance(s.slice(0, target.length + 2), target) / target.length;
       // on an equal match take the longer name: "Rare Mystery Cargo", not "Mystery Cargo"
-      if (d < bestScore - 0.02 || (Math.abs(d - bestScore) <= 0.02 && best && l.key.length > best.key.length)) { bestScore = d; best = l; }
+      if (d < bestScore - 0.02 || (Math.abs(d - bestScore) <= 0.02 && best && k.key.length > best.key.length)) { bestScore = d; best = k; }
     }
-    return bestScore <= 0.4 ? best : null;
+    return bestScore <= 0.4 ? best.l : null;
   }
 
   // Feed line above the grid: "Player spent 200,000 Koen on a mystery cargo and obtained [Studio Monitor]".
   // The item name may be cut off by the panel edge. Returns { nick, price, item } or null.
+  // In the Russian game: "Player потратил 376 000 коинов на таинственный груз и получил предмет «[Космич. лаб…]»".
+  // The line scrolls when it is long, so its start (the nick, even part of "потратил") may be cut off.
   function parseFeed(text) {
     const s = text.replace(/\s+/g, ' ');
     // at low resolution "obtained" is read as "obloned", "obtomed" — "ob…" or a bracket is enough
-    const m = s.match(/(\S+)\s+spent\s+([\d][\d ,.oO]*\d)\s*K\w*\s+on\b.*?(?:\bob\w*|(?=[\[({]))\s*[\[({|]?\s*([^\]\)}|]+)/i);
+    const m = s.match(/(\S+)\s+spent\s+([\d][\d ,.oO]*\d)\s*K\w*\s+on\b.*?(?:\bob\w*|(?=[\[({]))\s*[\[({|]?\s*([^\]\)}|]+)/i)
+      // Cyrillic letters are not "word" characters for \b, so spaces are matched instead
+      || s.match(/(\S*)\s*\S*ратил\S*\s+(\d[\d ,.oOоО]*\d)\s*\S+\s+на\s.*?(?:пол\S*(?:\s+пред\S*)?|(?=[\[({«]))\s*[«"]?\s*[\[({|]?\s*([^\]\)}|»]+)/i);
     if (!m) return null;
-    const price = +m[2].replace(/[oO]/g, '0').replace(/\D/g, '');
-    const item = m[3].replace(/[^A-Za-z0-9 .\-'&]/g, '').trim();
+    const price = +m[2].replace(/[oOоО]/g, '0').replace(/\D/g, '');
+    const item = m[3].replace(/[^A-Za-zА-Яа-яЁё0-9 .\-'&]/g, '').trim();
     if (!price || item.length < 3) return null;
     return { nick: m[1], price, item };
   }
 
-  // Balance below the grid: "Owned: 624,605" (the Koen icon before the number is read as junk)
+  // Balance below the grid: "Owned: 624,605", in Russian "Имеется: 624 605" (the Koen icon before the number is read as junk)
   function parseBalance(text) {
-    const m = text.replace(/[oO](?=[\d,.]*\d)/g, '0').match(/wned\D{0,12}(\d{1,3}(?:[ ,.]\d{3})+|\d{1,9})/i);
+    const m = text.replace(/[oOоО](?=[\d,.]*\d)/g, '0').match(/(?:wned|меет\S*)\D{0,12}(\d{1,3}(?:[ ,.]\d{3})+|\d{1,9})/i);
     return m ? +m[1].replace(/\D/g, '') : 0;
   }
 
   // The closest name from a list of { name } (a name from the line may be cut off — then compare with the start).
   // Returns the list element or null.
   function matchName(text, list) {
-    const norm = x => x.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const norm = x => x.toLowerCase().replace(/ё/g, 'е').replace(/[^a-z0-9а-я]/g, '');
     const s = norm(text);
     if (s.length < 3) return null;
     let best = null, bestScore = Infinity;
@@ -279,7 +339,28 @@ const Ocr = (() => {
       const d = distance(s, target) / Math.max(s.length, target.length) + (s.length < n.length ? 0.01 : 0);
       if (d < bestScore) { bestScore = d; best = el; }
     }
-    return bestScore <= 0.25 ? best : null;
+    return bestScore <= 0.25 ? best : matchWords(text, list);
+  }
+
+  // By words, for names the game shortens or that our translation words differently: "Космич. лаб" is
+  // "Набор «Космическая лаборатория»". Every word read must start a word of the name, in the same order and
+  // one after another (a slip of one letter is allowed in longer words). Taken only if exactly one name fits.
+  function matchWords(text, list) {
+    const words = t => t.toLowerCase().replace(/ё/g, 'е').split(/[^a-z0-9а-я]+/).filter(Boolean);
+    const read = words(text);
+    if (read.length < 2 || read.join('').length < 6) return null;
+    // the last word is often cut by the panel edge and its last letter misread
+    const starts = (r, w, last) => {
+      const head = w.slice(0, r.length);
+      return head === r || ((r.length >= 5 || (last && r.length >= 3)) && head.length === r.length && distance(r, head) <= 1);
+    };
+    const fits = list.filter(el => {
+      const ws = words(el.name);
+      for (let i = 0; i + read.length <= ws.length; i++) if (read.every((r, j) => starts(r, ws[i + j], j === read.length - 1))) return true;
+      return false;
+    });
+    const items = new Set(fits.map(el => el.it || el));
+    return items.size === 1 ? fits[0] : null;
   }
 
   function distance(a, b) {
@@ -293,5 +374,5 @@ const Ocr = (() => {
     return dp[a.length][b.length];
   }
 
-  return { start, read, readData, labelCanvas, parseLabel, tipCanvas, findTipBox, parseTip, splitPrices, parseFeed, parseBalance, matchName };
+  return { start, setLang, lang: () => gameLang, read, readData, labelCanvas, parseLabel, tipCanvas, feedCanvas, findTipBox, parseTip, splitPrices, parseFeed, parseBalance, matchName };
 })();

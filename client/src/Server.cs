@@ -18,7 +18,7 @@ namespace MerchantEar.Client
         static readonly List<Peer> screenClients = new List<Peer>();  // pages taking the screen frames
         const int SCREEN_FRAME_MS = 33;  // up to 30 frames per second
         const int BLACK_CHECK_EVERY = 15; // check for a black frame once per this many frames
-        static string status = "{\"type\":\"status\",\"state\":\"start\"}";
+        static string status = "{\"type\":\"status\",\"state\":\"start\",\"version\":\"" + Program.Version + "\"}";
         static Settings settings;
 
         // Blocks the thread: serves requests until the window is closed
@@ -234,7 +234,7 @@ namespace MerchantEar.Client
         static void SetStatus(string state, int pid, string message)
         {
             status = "{\"type\":\"status\",\"state\":\"" + state + "\",\"pid\":" + pid + ",\"rate\":" + Loopback.SAMPLE_RATE +
-                     ",\"message\":\"" + (message ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"}";
+                     ",\"version\":\"" + Program.Version + "\",\"message\":\"" + (message ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"}";
             Broadcast(Encoding.UTF8.GetBytes(status), WebSocketMessageType.Text);
             Console.WriteLine(DateTime.Now.ToString("HH:mm:ss") + "  " + (state == "game" ? "listening to the game (PID " + pid + ")" : state == "wait" ? "game is not running, waiting for " + message : "error: " + message));
         }
