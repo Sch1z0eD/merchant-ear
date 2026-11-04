@@ -445,6 +445,8 @@ const ui = {
   sens: $('sens'), sensVal: $('sensVal'), thr: $('thr'), thrVal: $('thrVal'), beep: $('beep'),
   map: $('map'), imgFile: $('imgFile'), profile: $('profile'), libDir: $('libDir'), rank: $('rank'), valueBasis: $('valueBasis'),
   stageTitle: $('stageTitle'), stageHint: $('stageHint'), rescan: $('btnRescan'), done: $('btnDone'),
+  // kept here, not looked up by id: in overlay mode these are moved into the overlay window's document
+  session: $('session'),
 };
 const specCtx = ui.spec.getContext('2d');
 const mapCtx = ui.map.getContext('2d');
@@ -2165,9 +2167,9 @@ function drawMapInner() {
   // the best buys by payback: a "#1", "#2" badge on the map and the list under it
   const ranking = rankCargo();
   const rankOf = new Map(ranking.filter(x => x.pb.verdict !== 'skip').slice(0, buysPerRaid).map((x, i) => [x.key, i + 1]));
-  renderRank(ranking, rankOf);
-  checkAlerts(ranking);
-  renderSession();
+  // the panels beside the map: an error there is logged once, but never leaves the map itself undrawn
+  try { renderRank(ranking, rankOf); checkAlerts(ranking); renderSession(); }
+  catch (e) { if (!drawMapInner.panelFailed) log(tr('log.mapFail', { msg: e.message })); drawMapInner.panelFailed = true; }
   const hoverKey = hover && performance.now() - hover.t < HOVER_KEEP_MS ? hover.key : null;
   // Over every cargo: the hovered one is outlined, the best buys get a badge, a known price shows the payback
   const decorate = (key, rec, x, y, w, h) => {
@@ -2367,7 +2369,7 @@ function renderRank(ranking, rankOf) {
 function renderSession() {
   const mine = purchases.filter(b => b.t >= sessionStart);
   const head = `<div class="head">${esc(tr('session.title'))}<button class="small" id="btnSessionReset">${esc(tr('session.reset'))}</button></div>`;
-  if (!mine.length) { $('session').innerHTML = head + `<div class="muted">${esc(tr('session.none'))}</div>`; return; }
+  if (!mine.length) { ui.session.innerHTML = head + `<div class="muted">${esc(tr('session.none'))}</div>`; return; }
   let spentK = 0, value = 0, reds = 0;
   for (const b of mine) {
     const it = b.itemId != null && itemById.get(b.itemId);
@@ -2377,11 +2379,11 @@ function renderSession() {
   }
   const diff = spentK ? value / spentK - 1 : 0;
   const last = mine[mine.length - 1];
-  $('session').innerHTML = head + `<div>${esc(tr('session.line', { n: mine.length, spent: money(spentK), red: reds, value: money(value) }))}
+  ui.session.innerHTML = head + `<div>${esc(tr('session.line', { n: mine.length, spent: money(spentK), red: reds, value: money(value) }))}
     <b style="color:${diff >= 0 ? UI.good : UI.bad}">(${diff > 0 ? '+' : ''}${pct(diff)})</b></div>
     <div class="muted">${esc(tr('session.last', { item: last.item || '?' }))}</div>`;
 }
-$('session').addEventListener('click', e => {
+ui.session.addEventListener('click', e => {
   if (e.target.id !== 'btnSessionReset') return;
   sessionStart = Date.now();
   try { sessionStorage.setItem(SESSION_KEY, String(sessionStart)); } catch {}
@@ -2857,7 +2859,7 @@ async function openOverlay() {
   left.className = 'ov-map'; right.className = 'ov-side';
   box.append(left, right);
   w.document.body.append(box);
-  overlayParts = [[$('mapWrap'), left], [document.querySelector('.stage'), right], [ui.result, right], [ui.rank, right], [$('session'), right]].map(([el, to]) => {
+  overlayParts = [[$('mapWrap'), left], [document.querySelector('.stage'), right], [ui.result, right], [ui.rank, right], [ui.session, right]].map(([el, to]) => {
     const ph = document.createComment('overlay');
     el.replaceWith(ph);
     to.append(el);
